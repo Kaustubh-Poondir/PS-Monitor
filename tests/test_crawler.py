@@ -130,8 +130,8 @@ class TestDeduplication(unittest.TestCase):
 
     def test_resolved_when_process_disappears(self):
         ev = FakeEval(1234, "nc", "RISKY", 9, ["Suspicious keyword 'nc' in process"])
-        self._run_scan_with([ev])           # process appears
-        self._run_scan_with([])             # process gone
+        self._run_scan_with([ev])           # here, the process appears
+        self._run_scan_with([])             # here, the process is gone
         self.assertEqual(self.crawler.resolved_count, 1)
         self.assertNotIn(1234, self.crawler._active)
 

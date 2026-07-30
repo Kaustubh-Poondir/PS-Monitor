@@ -1,3 +1,7 @@
+
+#The Monitor class orchestrates data collection, rule evaluation, display rendering, logging, and user-triggered actions.
+#Also manages the background Crawler instance.
+
 import os
 import sys
 import signal
@@ -27,7 +31,7 @@ class Monitor:
         self.scan_count = 0
         self.logger     = ScanLogger(log_path)
         self.config     = {**DEFAULT_CONFIG, **(threshold_overrides or {})}
-        self.crawler    = None   # set by start_crawler()
+        self.crawler    = None   # gets assigned after start_crawler() runs
 
         set_color(use_color)
         signal.signal(signal.SIGINT, self._handle_interrupt)
@@ -53,7 +57,8 @@ class Monitor:
         if self.crawler and self.crawler.is_running():
             self.crawler.stop()
 
-#main core scan
+    # Core scan logic
+
     def _do_scan(self):
         self.scan_count += 1
         system_stats = collect_system_stats()

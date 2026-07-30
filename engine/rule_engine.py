@@ -1,8 +1,12 @@
+
+#Evaluates each process against a set of security/performance rules.
+
 from dataclasses import dataclass, field
 from typing import List, Callable, Tuple
 import re
 
 #Default configuration
+
 
 DEFAULT_CONFIG = {
     "cpu_threshold":        20.0,   # Catch stress-ng(a personal stress test we used for showcasing our project functionality under stress) easily

@@ -1,3 +1,18 @@
+"""
+The Crawler is a background daemon thread that continuously watches
+processes and services — like a blockchain, it tracks a chain of events
+and ensures the SAME alert is NEVER recorded twice (deduplication).
+
+HOW IT WORKS:
+  1. Every N seconds (default 15) it collects all running processes
+  2. For each SUSPICIOUS or RISKY process it builds a "fingerprint":
+       fingerprint = hash(pid + process_name + start_time + alert_type)
+     This fingerprint is stored in a seen_fingerprints set
+  3. If the fingerprint already exists → DUPLICATE → silently skipped
+  4. If it is NEW → logged ONCE and added to seen_fingerprints
+  5. If a previously flagged process disappears → logged as RESOLVED
+"""
+
 import threading
 import time
 import hashlib
@@ -8,6 +23,7 @@ from Collectors import collect_all_processes
 from engine.rule_engine import scan_all
 
 
+# One alert entry
 
 class CrawlerAlert:
     def __init__(self, pid, name, level, score, alerts, username, exe, timestamp):
@@ -21,6 +37,7 @@ class CrawlerAlert:
         self.timestamp = timestamp
 
 
+# Crawler
 
 class Crawler:
     """
@@ -43,21 +60,27 @@ class Crawler:
         self._thread  = None
         self._running = False
 
-    
+        #deduplication state: fingerprints we've already logged — an alert only gets written once its fingerprint shows up here
+         
         self._seen_fingerprints: Set[str] = set()
 
+        # maps each pid to the alert messages currently active for it
         self._active: Dict[int, Set[str]] = {}
 
-        
+        # maps each pid to its start time, so a reused pid isn't mistaken for the same process
+         
         self._active_start: Dict[int, str] = {}
 
+        # every new alert found this session, kept for the dashboard
         self._alert_log: list = []
 
+        # running totals shown on the dashboard
         self.total_scans      = 0
         self.new_alert_count  = 0
         self.duplicate_count  = 0
         self.resolved_count   = 0
 
+    # Fingerprinting
 
     def _fingerprint(self, pid: int, name: str, start: str, alert_msg: str) -> str:
         """
@@ -69,6 +92,7 @@ class Crawler:
         raw = f"{pid}|{name}|{start}|{alert_msg}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
+    #Control
 
     def start(self):
         with self._lock:
@@ -78,7 +102,7 @@ class Crawler:
         self._thread = threading.Thread(
             target=self._loop,
             daemon=True,
-            name="PSGuard-Crawler"
+            name="PS-Monitor-Crawler"
         )
         self._thread.start()
         self.logger.log_crawler_event(
@@ -102,6 +126,7 @@ class Crawler:
         with self._lock:
             return self._running
 
+    # Main loop
 
     def _loop(self):
         while True:
@@ -109,7 +134,6 @@ class Crawler:
                 if not self._running:
                     break
             self._scan_once()
-            # Sleep in 0.1s chunks so stop() is responsive
             for _ in range(self.interval * 10):
                 with self._lock:
                     if not self._running:
@@ -126,6 +150,7 @@ class Crawler:
                 self.total_scans += 1
                 current_pids = {ev.pid for ev in evaluations}
 
+                # step 1: figure out if any flagged process has since ended
                 for pid in list(self._active.keys()):
                     if pid not in current_pids:
                         name = "unknown"
@@ -137,28 +162,32 @@ class Crawler:
                         self._active_start.pop(pid, None)
                         self.resolved_count += 1
 
+                # step 2: look at everything still flagged as risky
                 for ev in evaluations:
                     if ev.level not in ("SUSPICIOUS", "RISKY"):
                         continue
 
-                    start = ev.started_at  
-                              
+                    start = ev.started_at  # fingerprint same as the process instance
 
                     for alert_msg in ev.alerts:
                         fp = self._fingerprint(ev.pid, ev.name, start, alert_msg)
 
                         if fp in self._seen_fingerprints:
+                            # already logged this , so skipping it quietly
                             self.duplicate_count += 1
                             continue
 
+                        # first time seeing this alert, so record and log it
                         self._seen_fingerprints.add(fp)
                         self.new_alert_count += 1
 
+                        # remember this pid as currently flagged
                         if ev.pid not in self._active:
                             self._active[ev.pid] = set()
                         self._active[ev.pid].add(alert_msg)
                         self._active_start[ev.pid] = start
 
+                        # write the alert out to the log file
                         self.logger.log_crawler_event(
                             "NEW_ALERT",
                             f"[{ev.level}] PID={ev.pid} name={ev.name} "
@@ -166,6 +195,7 @@ class Crawler:
                             f"fp={fp} | {alert_msg}"
                         )
 
+                        # keep a copy around for the live dashboard
                         self._alert_log.append(CrawlerAlert(
                             pid=ev.pid, name=ev.name, level=ev.level,
                             score=ev.score, alerts=[alert_msg],
@@ -176,6 +206,7 @@ class Crawler:
         except Exception as e:
             self.logger.log_error(f"Crawler error: {e}")
 
+    # Data access
 
     def get_summary(self) -> dict:
         """Thread-safe snapshot for the UI."""

@@ -1,10 +1,9 @@
 """
-Collectors/process_collector.py
 Gathers raw process data from the OS using psutil.
-Returns structured dicts that the rule engine can evaluate.
+Returns structured dictionaries that the rule engine can evaluate.
 """
 
-import psutil
+import psutil   #THE most important dictionary
 import os
 from datetime import datetime
 
@@ -18,10 +17,9 @@ def _safe(fn, default=None):
 
 
 def collect_all_processes():
-    """
-    Iterate over every running process and return a list of info dicts.
-    Each dict contains fields needed by the rule engine.
-    """
+    
+    #Iterate over every running process and return a list of info dicts.
+   
     processes = []
 
     attrs = ["pid", "name", "username", "status", "ppid",
@@ -30,7 +28,7 @@ def collect_all_processes():
     for proc in psutil.process_iter(attrs, ad_value=None):
         info = proc.info.copy()
 
-        # Fields that require a separate call (may raise exceptions)
+        # these fields need their own call and can throw, so it fetches them safely
         info["exe"]        = _safe(proc.exe, "N/A")
         info["cmdline"]    = _safe(lambda: " ".join(proc.cmdline()), "N/A")
         info["cpu_percent"]= _safe(lambda: proc.cpu_percent(interval=0.05), 0.0)
@@ -39,13 +37,13 @@ def collect_all_processes():
         info["connections"]= _safe(lambda: proc.connections(kind="inet"), [])
         info["open_files_count"] = _safe(lambda: len(proc.open_files()), 0)
 
-        # Resolve create_time to human-readable
+        # turn the raw timestamp into something readable
         ct = info.get("create_time")
         info["started_at"] = (
             datetime.fromtimestamp(ct).strftime("%Y-%m-%d %H:%M:%S") if ct else "N/A"
         )
 
-        # Keep the live proc object so rules can do extra queries
+        # hang onto the live proc object in case a rule needs more data later
         info["_proc"] = proc
 
         processes.append(info)

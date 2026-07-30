@@ -22,6 +22,8 @@ python3 main.py                  # Live dashboard (Ctrl+C to exit)
 PS-Monitor/
 ├── main.py                     # CLI entry point
 ├── requirements.txt
+├── logs/
+│   └── monitor.log             # Rotating scan log (auto-created)
 ├── Collectors/
 │   ├── process_collector.py    # Gathers per-process data via psutil
 │   └── service_collector.py    # Reads systemd service status

@@ -8,8 +8,12 @@ A CLI-based security and performance monitoring tool for Linux.
 Open the folder in terminal in your Linux machine.
 ```bash
 pip install -r requirements.txt
-python3 main.py                  # Live dashboard (Ctrl+C to exit)
 
+
+```
+To run the program:
+```bash
+python3 main.py                  # Live dashboard (Ctrl+C to exit)
 ```
 
 ## Project Structure

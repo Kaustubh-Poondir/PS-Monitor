@@ -1,8 +1,5 @@
-"""
-Collectors/service_collector.py
-Gathers systemd service status using `systemctl`.
-Falls back gracefully if systemd is not available.
-"""
+#Gathers systemd service status using `systemctl`.
+
 
 import subprocess
 import shutil
@@ -58,7 +55,7 @@ def collect_services(unit_filter: str = "") -> List[ServiceInfo]:
     if not _systemctl_available():
         return []
 
-    # List units in machine-readable format
+    # ask systemctl for the unit list in JSON so it's easy to parse
     raw = _run(
         ["systemctl", "list-units", "--type=service",
          "--all", "--no-pager", "--no-legend",
@@ -68,7 +65,7 @@ def collect_services(unit_filter: str = "") -> List[ServiceInfo]:
     services = []
 
     if raw and raw.startswith("["):
-        # JSON output (systemd >= 245)
+        # newer systemd versions can give us JSON directly
         import json
         try:
             units = json.loads(raw)
@@ -88,7 +85,7 @@ def collect_services(unit_filter: str = "") -> List[ServiceInfo]:
             )
             services.append(svc)
     else:
-        # Fallback: parse plain text output
+        # older systemd doesn't support JSON output, so fall back to text
         raw_plain = _run(
             ["systemctl", "list-units", "--type=service",
              "--all", "--no-pager", "--no-legend"]
